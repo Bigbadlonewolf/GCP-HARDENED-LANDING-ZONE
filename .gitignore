@@ -1,0 +1,33 @@
+# Terraform
+**/.terraform/
+*.tfplan
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+.terraform.lock.hcl
+backend.tf
+
+# Credentials — never commit
+*.json
+!app/requirements.txt
+credentials.json
+token.json
+service-account-key.json
+*.pem
+*.key
+
+# Local env
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
