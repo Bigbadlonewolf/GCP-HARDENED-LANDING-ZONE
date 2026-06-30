@@ -46,3 +46,147 @@ NIST policy sets.
 
 The zone deploys in four ordered layers. Each layer has its own Terraform
 root and isolated GCS backend prefix.
+
+```
+Layer 0: Bootstrap
+├── GCS bucket for Terraform state
+├── Service account for CI/CD
+└── IAM bindings for automation
+
+Layer 1: Security
+├── Cloud KMS (CMEK, 90-day rotation)
+├── VPC Service Controls
+├── Security Command Center configuration
+└── Organization policies (constraints)
+
+Layer 2: Network
+├── Deny-all VPC
+├── Private subnets (RFC 1918)
+├── Cloud IAP for SSH access
+├── Cloud NAT for egress
+└── Firewall rules (default deny, explicit allow)
+
+Layer 3: Workload
+├── GKE cluster (private, shielded nodes)
+├── Cloud SQL (private IP, SSL enforced)
+├── Dedicated service accounts per workload
+└── Workload Identity Federation
+```
+
+### Layer Dependencies
+
+```
+Layer 0 (Bootstrap)
+       │
+       ▼
+Layer 1 (Security)
+       │
+       ▼
+Layer 2 (Network)
+       │
+       ▼
+Layer 3 (Workload)
+```
+
+Each layer's outputs feed into the next layer's inputs via Terraform remote state.
+
+### Zero Trust Layers
+
+| Layer | Technology | Trust Model |
+|---|---|---|
+| Ingress | Cloud IAP | Identity-aware proxy — no VPN required |
+| Service-to-service | Istio mTLS | Automatic mutual TLS between pods |
+| Policy enforcement | OPA default-deny | Every request must be explicitly allowed |
+| Infrastructure | Terraform IaC | Immutable, version-controlled infrastructure |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- GCP organization with billing
+- `roles/resourcemanager.organizationAdmin`
+- Terraform 1.7+
+- `gcloud` CLI authenticated
+
+### Deploy
+
+```bash
+# 1. Clone and configure
+git clone https://github.com/Bigbadlonewolf/GCP-HARDENED-LANDING-ZONE.git
+cd GCP-HARDENED-LANDING-ZONE
+
+# 2. Set your organization and project IDs
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars
+
+# 3. Deploy layer by layer
+cd terraform/0-bootstrap && terraform init && terraform apply
+cd ../1-security  && terraform init && terraform apply
+cd ../2-network   && terraform init && terraform apply
+cd ../3-workload  && terraform init && terraform apply
+
+# 4. Validate with OPA
+./scripts/validate-policies.sh
+```
+
+---
+
+## Repository Layout
+
+```
+GCP-HARDENED-LANDING-ZONE/
+├── README.md
+├── terraform/
+│   ├── 0-bootstrap/        # State backend, CI/CD service account
+│   ├── 1-security/         # KMS, VPC SC, org policies
+│   ├── 2-network/          # VPC, subnets, IAP, NAT, firewalls
+│   └── 3-workload/         # GKE, Cloud SQL, service accounts
+├── policies/               # OPA/Conftest policies (symlink to COMPLIANCE_AS_CODE)
+├── modules/                # Reusable Terraform modules
+├── scripts/
+│   ├── validate-policies.sh
+│   └── apply-layer.sh
+├── cloudbuild/
+│   └── terraform-apply.yaml
+├── docs/
+│   ├── architecture.md     # Full ADR
+│   ├── controls-mapping.md # Requirement → control mapping
+│   └── runbook.md          # Operational procedures
+└── app/                    # Sample workload manifests
+```
+
+---
+
+## CI/CD
+
+| Pipeline | Trigger | Purpose |
+|---|---|---|
+| `terraform-plan` | PR to master | OPA policy check + Terraform plan review |
+| `terraform-apply` | Merge to master | Automated layer deployment |
+| `security-scan` | Daily | Trivy vulnerability scan of container images |
+
+---
+
+## Cost Estimate
+
+| Component | Monthly Cost |
+|---|---|
+| Cloud KMS | ~$3 |
+| VPC + NAT | ~$35 |
+| GCS (state + logs) | ~$5 |
+| Monitoring | ~$10 |
+| **Total** | **~$53/month** |
+
+---
+
+## Related Projects
+
+- [COMPLIANCE_AS_CODE](https://github.com/Bigbadlonewolf/COMPLIANCE_AS_CODE) — OPA/Rego policies used by this landing zone
+- [SecureVault](https://github.com/Bigbadlonewolf/SecureVault) — Real-time security findings alerting
+- [JIT-ACCESS-BROKER](https://github.com/Bigbadlonewolf/JIT-ACCESS-BROKER) — Just-in-time privileged access
+
+## License
+
+MIT
